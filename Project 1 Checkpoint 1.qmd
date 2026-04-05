@@ -1,0 +1,25 @@
+---
+title: "Project 1 Checkpoint 1"
+format: html
+editor: visual
+---
+
+# Project Checkpoint 1
+
+## Context
+
+This dataset is called “Democracy_data.csv” which contains data about many countries across the world and the state of their governments. Notable variables include: is_monarchy, is_democracy, is_colony, has_full_suffrage, etc. with over 40 total variables all specifying one aspect of that country’s government. Looking over what cleaning has been done to the data, the main bulk of the cleaning code seems to be changing the original variable names to become easily understandable and making other columns more readable as well.
+
+## Research Questions
+
+### Addressed with data
+
+1.  Does suffrage restriction have an effect on electoral category index?
+2.  Does number of chambers have an effect on regime category index?
+
+### Addressed with Supplementary Data
+
+1.  Does president name length have an effect on country population?
+2.  Does a country having a new constitution have an effect on enlistment rates?
+
+## Visualizations
