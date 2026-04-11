@@ -1,0 +1,28 @@
+---
+title: "Project 1 Checkpoint 2"
+format: html
+editor: visual
+---
+
+## RQ 1
+
+## Regimes by Year
+
+```{r}
+library(tidyverse)
+
+props <- function(variable){
+democracy_data |>
+  group_by(year) |>
+  summarise(prop = mean(.data[[variable]], na.rm = TRUE))
+}
+
+vars <- c("is_monarchy", "is_commonwealth", "is_presidential",
+          "is_colony", "is_communist")
+
+result <- map_dfr(vars, function(var) {
+  props(var) |>
+    mutate(variable = var)
+})
+result
+```
