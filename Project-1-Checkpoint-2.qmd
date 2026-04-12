@@ -1,0 +1,161 @@
+---
+title: "Project-1-Checkpoint2"
+format: html
+---
+
+# Project Checkpoint 2
+
+# Context of the Data
+
+This dataset comes from the TidyTuesday project and contains information about political regimes across countries and time. Each row represents a country and year observation. The dataset includes variables such as regime type, different measures of democracy, suffrage, and other political aspects.
+
+# Load data
+
+```{r}
+#| message: false
+#| warning: false
+democracy_data <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2024/2024-11-05/democracy_data.csv')
+```
+
+# Data cleaning
+
+The data has been cleaned by using the `dplyr` package. Missing values for some columns were entered as "?", so those values are now NA. The columns were renamed to make more sense. Some columns were changed using `mutate` with `dplyr`. Also, the columns that were meant to be logical but were not were changed to logical using `as.logical`.
+
+## RQ 1
+
+## Spatial democracy across political characteristics
+
+```{r}
+library(tidyverse)
+
+mean_spatial_democracy <- function(
+  lgl_var,
+  spatial_democracy = democracy_data$spatial_democracy
+) {
+  valid <- !is.na(lgl_var)
+
+  true_mean <- mean(spatial_democracy[valid & lgl_var], na.rm = TRUE)
+  false_mean <- mean(spatial_democracy[valid & !lgl_var], na.rm = TRUE)
+
+  c("TRUE" = true_mean, "FALSE" = false_mean)
+}
+
+vars <- c(
+  "is_monarchy",
+  "is_commonwealth",
+  "is_female_monarch",
+  "is_democracy",
+  "is_presidential",
+  "is_interim_phase",
+  "is_female_president",
+  "is_colony",
+  "is_communist",
+  "has_proportional_voting",
+  "has_full_suffrage",
+  "is_multiparty",
+  "has_free_and_fair_election"
+)
+
+result <- map_dfr(vars, function(var) {
+  res <- mean_spatial_democracy(democracy_data[[var]])
+
+  tibble(
+    variable = var,
+    mean_true = res["TRUE"],
+    mean_false = res["FALSE"]
+  )
+})
+
+result
+```
+
+As expected, among the 13 columns we examined, the highest spatial democracy scores came from democratic countries with proportional voting. The spatial democracy score for female monarchs or presidents was higher than plain presidential countries or monarchies, which is important to note.
+
+## RQ 2
+
+## Regimes by Year
+
+```{r}
+library(tidyverse)
+
+props <- function(variable){
+democracy_data |>
+  group_by(year) |>
+  summarise(prop = mean(.data[[variable]], na.rm = TRUE))
+}
+
+vars <- c("is_monarchy", "is_commonwealth", "is_presidential",
+          "is_colony", "is_communist")
+
+result <- map_dfr(vars, function(var) {
+  props(var) |>
+    mutate(variable = var)
+})
+result
+```
+
+Our findings tell us that throughout the 20th century and into the 21st century, the proportion of monarchies has decreased, while commonwealth and presidential countries became more prevalent, to name a few regimes. One interesting thing to point is that the proportion of communist countries saw a sudden decline in the late 1900s, so we think it would be intriguing to look further into why that was the case.
+
+## RQ 3
+
+## How does leader tenure differ across regimes?
+
+Data summary with 2 new columns and a custom function
+
+```{r}
+tenure_data <- democracy_data |>
+  mutate(
+    president_tenure = year - president_accesion_year,
+    monarch_tenure = year - monarch_accession_year
+  )
+
+# function to get the mean tenure of either presidents or monarchs, and group them by their regime       category
+tenure_by_regime <- function(data, leader_type) {
+  if (leader_type == "president") {
+    data |>
+      filter(!is.na(president_name), !is.na(president_tenure)) |> 
+      group_by(president_name, regime_category) |> 
+      summarize(tenure = max(president_tenure, na.rm = TRUE), .groups = "drop") |>
+      group_by(regime_category) |>
+      summarize(mean_tenure = mean(tenure, na.rm = TRUE))
+  } else {
+    data |>
+      filter(!is.na(monarch_name), !is.na(monarch_tenure)) |>
+      group_by(monarch_name, regime_category) |>
+      summarize(tenure = max(monarch_tenure, na.rm = TRUE), .groups = "drop") |> 
+      group_by(regime_category) |>
+      summarize(mean_tenure = mean(tenure, na.rm = TRUE))
+  }
+}
+```
+
+```{r}
+tenure_by_regime(tenure_data, "president")
+tenure_by_regime(tenure_data, "monarch")
+```
+
+For presidential regimes, the dictatorships tend to have longer regimes, which aligns with our expectations. Royal dictatorship returned a mean tenure of 0 years, so we should look into why that was the case, and whether that was an error in the data or some other reason. Also, having spatial democracy score by regime would be interesting to look at and might reveal the effectiveness of certain regime types.
+
+## RQ 4
+
+## How young does monarchs rise to power compared to presidents?
+
+Data summary with 2 new columns and iteration with a helper function
+
+```{r}
+age_data <- democracy_data |>
+  mutate(
+    monarch_age = monarch_accession_year - monarch_birthyear,
+    president_age = president_accesion_year - president_birthyear
+  )
+
+# helper function to get the mean of the column in the 'age' data frame 
+get_mean <- function(x){
+  mean(age_data[[x]], na.rm = TRUE)
+}
+
+cols <- c("monarch_age", "president_age")
+map(cols, get_mean)
+```
+
+Our findings from this question reveal that monarch tend to be much younger during their reign as compared to presidents. It is easy to see why that is the case, as monarchs are often thrown into power under extraneous circumstances such as the death of the former monarch. As for presidents, many countries already have an age limit for presidential candidates which increases the average age of presidents. Another reason for presidents tending to be older is the fact that older candidates might be more appealing due to their experience in politics, or their specific policies that pertain to certain age groups.
