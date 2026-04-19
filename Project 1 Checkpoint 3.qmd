@@ -1,0 +1,170 @@
+---
+title: "Project-1-Checkpoint-3"
+format: html
+editor: visual
+---
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(httr)
+library(countrycode)
+library(glue)
+library(jsonlite)
+```
+
+## Country Source #1
+
+### Setup
+
+We load our democracy data and filter to 2000 onward to avoid issues with historical countries like the Soviet Union that no longer exist and won't have GDP data.
+
+```{r}
+#| message: false
+democracy_data <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2024/2024-11-05/democracy_data.csv')
+
+democracy_recent <- democracy_data |>
+  filter(year >= 2000)
+```
+
+### Intro
+
+We use the API-Ninjas GDP endpoint to get historical GDP data for each country. The API returns year-by-year GDP statistics including GDP per capita and GDP growth rate. We iterate over all unique countries using map().
+
+### API Key
+
+```{r}
+
+my_key <- "pv2dwTZ4RCa3KghkCHIK1P2Axb4hdYr051DxyAMp"
+```
+
+### API Function
+
+takes a 3-letter country code and returns a GDP data frame for that country.
+
+```{r}
+get_gdp <- function(country, key = my_key) {
+  
+  url <- glue("https://api.api-ninjas.com/v1/gdp?country={country}&X-Api-Key={key}")
+  my_data <- safely(fromJSON)(url)
+  
+  if (is.null(my_data$result)) {
+    return(NULL)
+  } else {
+    return(my_data$result)
+  }
+}
+
+```
+
+### Iterating all the countries from API data set
+
+```{r}
+
+codes <- democracy_recent |>
+  distinct(country_code) |>
+  pull(country_code)
+
+gdp_list <- map(codes, get_gdp)
+
+gdp_df <- gdp_list |>
+  compact() |>
+  bind_rows()
+
+write_csv(gdp_df, "C:/Users/keoni/OneDrive/Documents/STAT-431/Government-List/gdp_data.csv")
+```
+
+### Combining to the original data set
+
+```{r}
+
+combined <- democracy_recent |>
+  left_join(gdp_df, by = c("country_code" = "country", "year"))
+
+```
+
+## Country Source #2
+
+### Dataset #2 Description (Country Life Expectancy)
+
+This dataset includes many variables regarding health, life expectancy, financial data, and other miscellaneous information. The data contains 178 countries and ranges from the year 2000 to 2015. This csv was acquired via download on Kaggle by Amir Hossein Mirzaei.
+
+### Loading in and Cleaning the Countries Dataset
+
+```{r}
+# load in package that allows us to convert country names to codes
+library(countrycode)
+
+# load in countries dataset
+life_expectancy <- read.csv("C:/Users/keoni/Downloads/life_expectancy.csv")
+
+# create a new variable containing each country's iso3c code
+life_expectancy$country_code <-  countrycode(life_expectancy$Country, 
+            origin = "country.name", 
+            destination = "iso3c", 
+            custom_match = c("Netherlands Antilles" = "ANT",
+                             "Virgin Islands" = "VIR"))
+
+write.csv(life_expectancy, "C:/Users/keoni/OneDrive/Documents/STAT-431/Government-List/country_life_expectancy.csv", row.names = FALSE)
+```
+
+### Combining to the original data set
+
+```{r}
+meta_data <- combined |>
+  left_join(life_expectancy, by = c("country_code" = "country_code", "year" = "Year"))
+```
+
+## Final Meta Data Set
+
+```{r}
+names(meta_data)
+```
+
+## Data Summary #1
+
+### GDP by Different Regimes
+
+```{r}
+prop <- function(variable){
+  meta_data |>
+    filter(.data[[variable]] == 1) |>
+    summarise(
+      avg_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+      n = n()
+    )
+}
+
+vars <- c("is_monarchy", "is_commonwealth", "is_presidential",
+          "is_colony", "is_communist")
+
+result <- map_dfr(vars, function(var) {
+  prop(var) |>
+    mutate(variable = var)
+})
+result
+```
+
+Our findings point towards colonies, on average, having the highest GDP, whilst communist countries have the lowest.
+
+## Visualization #2
+
+### Life Expectancy by GDP
+
+```{r}
+ggplot(
+  meta_data |> drop_na(gdp_per_capita_nominal, Life.expectancy),
+  aes(x = gdp_per_capita_nominal, y = Life.expectancy)) +
+  geom_point() +
+  scale_x_log10() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Relationship Between GDP per Capita and Life Expectancy",
+    subtitle = "Countries over time",
+    x = "GDP per Capita (USD)",
+    y = "Life Expectancy (years)"
+  )
+```
+
+Our findings show that there is a strong, positive linear association between life expectancy and GDP among the data we have used.
