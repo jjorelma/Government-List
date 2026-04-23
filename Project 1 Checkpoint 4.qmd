@@ -1,0 +1,65 @@
+---
+title: "Project 1 Checkpoint 4"
+format: html
+editor: visual
+---
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(countrycode)
+library(glue)
+library(jsonlite)
+library(palmerpenguins)
+library(gt)
+```
+
+## Statistical Model #1
+
+### Reading in Data
+
+```{r}
+meta_data <- read.csv("C:/Users/keoni/Downloads/meta_data.csv")
+```
+
+### ANOVA of life expectancy by regime category and year
+
+```{r}
+stuff <- na.omit(meta_data[, c("Life.expectancy", "regime_category", "year")])
+
+stuff$regime_category <- as.factor(stuff$regime_category)
+stuff$year <- as.factor(stuff$year)
+
+anova <- summary(aov(Life.expectancy ~ regime_category + year, data = stuff))
+
+model <- as.data.frame(anova[[1]])
+model$Term <- rownames(model)
+model <- model[, c("Term", "Df", "Sum Sq", "Mean Sq", "F value", "Pr(>F)")]
+
+model %>%
+  gt() %>%
+  cols_label(
+    Term = "Term",
+    Df = "Df",
+    `Sum Sq` = "Sum of Squares",
+    `Mean Sq` = "Mean Square",
+    `F value` = "F value",
+    `Pr(>F)` = "p-value"
+  ) %>%
+  fmt_number(
+    columns = c(`Sum Sq`, `Mean Sq`, `F value`),
+    decimals = 2
+  ) %>%
+  fmt_scientific(
+    columns = `Pr(>F)`,
+    decimals = 2
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c(Df, `Sum Sq`, `Mean Sq`, `F value`, `Pr(>F)`)
+  ) %>%
+  tab_header(
+    title = "ANOVA Table of Life Expectancy by Regime Category and Year"
+  )
+```
