@@ -1,0 +1,132 @@
+---
+title: "Project-1-Checkpoint-4"
+format: html
+---
+
+## Visualization #1
+
+### Hexbin Plots of Schooling vs Life Expectancy by Development Status
+
+```{r}
+#| warning: false
+#| fig-alt: "faceted hexbin plots showing the relationship between schooling and life expectancy for many countries, grouped by whether the country is developing or already developed."
+
+library(ggplot2)
+library(tidyverse)
+library(hexbin)
+
+# read in data
+meta_data <- read.csv("meta_data.csv")
+
+# create hexagram plot
+meta_data |>
+  mutate(Status = factor(Status, levels = c("Developing", "Developed"))) |>
+  filter(!is.na(Status)) |>
+  ggplot(aes(x = Schooling, y = Life.expectancy)) +
+  geom_hex() +
+  facet_wrap(~ Status) +
+  scale_fill_viridis_c(option = "C") +
+  labs(title = "Schooling vs Life Expectancy by Development Status (2000-2015)",
+       x = "Schooling",
+       y = "Life Expectancy",
+       fill = "Count") +
+  theme_bw()
+  
+  
+```
+
+
+## Visualization #2
+
+### Area Plot of Mean GDP Per Capita by Regime Type From 2000-2020
+
+```{r}
+# changing df name to fit partner's code
+combined <- meta_data
+```
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(scales)
+
+mean_gdp <- combined |> 
+  filter(regime_category != "NA") |>
+  group_by(regime_category) |>
+  mutate(
+    regime_group = if_else(n() < 100, "Territories & Colonies", first(regime_category)) #since all the   counts of territories are less than 100
+  ) |>
+  ungroup() |> 
+  group_by(year, regime_group) |>
+  summarize(mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+            .groups = "drop")
+
+ggplot(data = mean_gdp,
+       mapping = aes(x = year,
+                     y = mean_gdp)) +
+  geom_area(mapping = aes(fill = regime_group),
+            position = "stack",
+            alpha = 0.5) +
+  scale_y_continuous(labels = comma) + #otherwise it was showing in e+05 with limits
+  scale_fill_brewer(palette = "Set1") +
+  labs(x = "", y = "Mean GDP per Capita (USD)",
+       title = "GDP per Capita by Regime Type",
+       fill = "Types of Regime") +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+```
+
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(countrycode)
+library(glue)
+library(jsonlite)
+library(palmerpenguins)
+library(gt)
+```
+
+## Statistical Model #1
+
+### ANOVA of life expectancy by regime category and year
+
+```{r}
+stuff <- na.omit(meta_data[, c("Life.expectancy", "regime_category", "year")])
+
+stuff$regime_category <- as.factor(stuff$regime_category)
+stuff$year <- as.factor(stuff$year)
+
+anova <- summary(aov(Life.expectancy ~ regime_category + year, data = stuff))
+
+model <- as.data.frame(anova[[1]])
+model$Term <- rownames(model)
+model <- model[, c("Term", "Df", "Sum Sq", "Mean Sq", "F value", "Pr(>F)")]
+
+model %>%
+  gt() %>%
+  cols_label(
+    Term = "Term",
+    Df = "Df",
+    `Sum Sq` = "Sum of Squares",
+    `Mean Sq` = "Mean Square",
+    `F value` = "F value",
+    `Pr(>F)` = "p-value"
+  ) %>%
+  fmt_number(
+    columns = c(`Sum Sq`, `Mean Sq`, `F value`),
+    decimals = 2
+  ) %>%
+  fmt_scientific(
+    columns = `Pr(>F)`,
+    decimals = 2
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c(Df, `Sum Sq`, `Mean Sq`, `F value`, `Pr(>F)`)
+  ) %>%
+  tab_header(
+    title = "ANOVA Table of Life Expectancy by Regime Category and Year"
+  )
+```
