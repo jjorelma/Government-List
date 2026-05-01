@@ -1,0 +1,96 @@
+---
+title: "Final Deliverable"
+format: html
+editor: visual
+embed-resources: true
+code-fold: true
+---
+
+# Data Context
+
+## Data Set #1 - "Democracy and Dictatorship"
+
+This dataset was originally created by J. A. Cheibub, J. Gandhi, and J. R. Vreeland in "Democracy and Dictatorship Revisited" which was later edited for the TidyTuesday project by Jon Harmon. It contains observations of different countries around the world, meaning the observational unit is a country observed over time. The data span from 1950 to 2020, making it a long data set that tracks changes in political systems across several decades. The data was collected to study regime types, including democracies and non-democracies, as well as transitions such as coups and other forms of regime changes. These topics are important for understanding global political stability, governance, and institutional development.
+
+## Data Set #2 - "Countries Life Expectancy"
+
+This data set includes country-level health, economic, and demographic numbers that are associated with life expectancy. Some examples are immunization rates, mortality rates, and economic variables such as GDP and health expenditure. The data accounts for 178 countries from 2000 to 2015. This data set was obtained from Kaggle (by Amir Hossein Mirzaei).
+
+## Data Set #3 - "API Ninjas GDP API"
+
+This data set is published and maintained by the API Ninjas team, who collects economic data from multiple sources. The data set consists of country-level observations, with each record representing a country’s GDP and related indicators for specific years. It includes both historical and more recent data, depending on the query made through the API. The data is collected and distributed digitally via API, though the exact original data sources are not fully specified. These data are of interest because they provide accessible and up to date economic indicators for use in analysis, applications, and research, making it easier to study and compare economic performance across countries.
+
+# Research Questions
+
+## Question #1
+
+How does leader tenure differ across different political regimes?
+
+## Question #2
+
+# Data Summaries and Visualizations
+
+```{r}
+#Chunk used to load needed packages and data sets
+#| message: false
+#| warning: false
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(countrycode)
+  library(glue)
+  library(jsonlite)
+  library(palmerpenguins)
+  library(gt)
+})
+
+meta_data <- suppressMessages(read_csv("meta_data.csv", show_col_types = FALSE))
+```
+
+# Data Model
+
+```{r}
+stuff <- meta_data %>%
+  mutate(
+    leader_tenure = case_when(
+      !is.na(monarch_accession_year) ~ year - monarch_accession_year,
+      !is.na(president_accesion_year) ~ year - president_accesion_year,
+    )
+  ) %>%
+  select(leader_tenure, regime_category, year) %>%
+  na.omit()
+
+stuff$regime_category <- as.factor(stuff$regime_category)
+stuff$year <- as.factor(stuff$year)
+
+anova_result <- summary(aov(leader_tenure ~ regime_category + year, data = stuff))
+
+model <- as.data.frame(anova_result[[1]])
+model$Term <- rownames(model)
+model <- model[, c("Term", "Df", "Sum Sq", "Mean Sq", "F value", "Pr(>F)")]
+
+model %>%
+  gt() %>%
+  cols_label(
+    Term = "Term",
+    Df = "Df",
+    `Sum Sq` = "Sum of Squares",
+    `Mean Sq` = "Mean Square",
+    `F value` = "F value",
+    `Pr(>F)` = "p-value"
+  ) %>%
+  fmt_number(
+    columns = c(`Sum Sq`, `Mean Sq`, `F value`),
+    decimals = 2
+  ) %>%
+  fmt_scientific(
+    columns = `Pr(>F)`,
+    decimals = 2
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c(Df, `Sum Sq`, `Mean Sq`, `F value`, `Pr(>F)`)
+  ) %>%
+  tab_header(
+    title = "ANOVA Table of Leader Tenure by Regime Category and Year"
+  )
+```
