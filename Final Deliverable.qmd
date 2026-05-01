@@ -94,3 +94,5 @@ model %>%
     title = "ANOVA Table of Leader Tenure by Regime Category and Year"
   )
 ```
+
+The ANOVA results show that leader tenure differs significantly across political regimes, as the effect of regime category is highly statistically significant (F = 297.80, p \< 0.001). This indicates that the type of political regime plays a major role in determining how long leaders remain in power. However, the effect of year is not statistically significant (F = 0.17, p ≈ 1.00), suggesting there is no meaningful change in leader tenure over time once regime type is considered. Overall, these findings suggest that variation in leader tenure is mainly due to differences between political regimes rather than trends over time.
