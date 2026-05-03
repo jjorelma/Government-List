@@ -1,0 +1,322 @@
+---
+title: "Project 2 Dashboard"
+format: 
+  dashboard: 
+    theme: flatly
+    highlight-style: github
+    mainfont: "Inter"
+    orientation: columns
+embed-resources: true
+nav-buttons: [github]
+github: https://github.com
+logo: globe-1.png
+logo-alt: "Blue globe logo"
+---
+
+# Research Question #1
+
+```{r}
+#Chunk used to load needed packages and data sets
+#| message: false
+#| warning: false
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(countrycode)
+  library(glue)
+  library(jsonlite)
+  library(palmerpenguins)
+  library(gt)
+  library(tidyr)
+  library(purrr)
+  library(ggridges)
+  library(stringr)
+  library(dplyr)
+  library(ggplot2)
+  library(scales)
+})
+
+meta_data <- suppressMessages(read_csv("meta_data.csv", show_col_types = FALSE))
+```
+
+## Plots
+
+### Tenure by Presidential Regime
+::: {.card title = "Tenure by Presidential Regime"}
+
+```{r}
+#| message: false
+#| fig-alt: "density ridge plot showing the distribution spread of tenure length in years by different presidential regimes."
+
+tenure_data <- meta_data |>
+  mutate(president_tenure = year - president_accesion_year,
+    monarch_tenure = year - monarch_accession_year
+  )
+
+tenure_data |>
+  filter(!is.na(president_tenure), 
+         !is.na(regime_category),
+         is_presidential == TRUE) |>
+  mutate(regime_category = stringr::str_wrap(regime_category, width = 25)) |>
+  ggplot(aes(x = president_tenure,
+             y = reorder(regime_category, president_tenure, FUN = median),
+             fill = after_stat(x))) +
+  geom_density_ridges_gradient(scale = 1.2,
+                               rel_min_height = 0.01,
+                               color = "white",
+                               alpha = 0.9) +
+  scale_fill_viridis_c(option = "C") +
+  labs(x = "Tenure (years)",
+       y = "Regime",
+       fill = "Years") +
+  theme_bw()
+```
+:::
+
+### Tenure by Monarchy
+::: {.card title = "Tenure by Monarchy"}
+
+```{r}
+#| fig-alt: "jittered scatterplot that plots each monarchy regime by type of regime and how long the regime's tenure was in years."
+
+tenure_data |>
+  filter(!is.na(monarch_tenure), !is.na(regime_category), is_monarchy == TRUE) |>
+  mutate(regime_category = stringr::str_wrap(regime_category, width = 25)) |>
+  ggplot(aes(x = reorder(regime_category, monarch_tenure),
+             y = monarch_tenure,
+             color = monarch_tenure)) +
+  geom_jitter(width = 0.15, alpha = 0.7, size = 2) +
+  coord_flip() +
+  scale_color_viridis_c(option = "C") +
+  labs(x = "Regime",
+       y = "Tenure (years)",
+       color = "Years") +
+  theme_bw()
+```
+:::
+
+
+## Tables 
+::: panel-tabset
+
+### Tenure by Presidential Regime
+
+```{r}
+#| message: false
+#| warning: false
+
+tenure_data <- meta_data |>
+  mutate(president_tenure = year - president_accesion_year,
+    monarch_tenure = year - monarch_accession_year
+  )
+
+# function to get the mean tenure of either presidents or monarchs, and group them by their regime       category
+tenure_by_regime <- function(data, leader_type) {
+  if (leader_type == "president") {
+    data |>
+      filter(!is.na(president_name), !is.na(president_tenure)) |> 
+      group_by(president_name, regime_category) |> 
+      summarize(tenure = max(president_tenure, na.rm = TRUE), .groups = "drop") |>
+      group_by(regime_category) |>
+      summarize(mean_tenure = mean(tenure, na.rm = TRUE))
+  } else {
+    data |>
+      filter(!is.na(monarch_name), !is.na(monarch_tenure)) |>
+      group_by(monarch_name, regime_category) |>
+      summarize(tenure = max(monarch_tenure, na.rm = TRUE), .groups = "drop") |> 
+      group_by(regime_category) |>
+      summarize(mean_tenure = mean(tenure, na.rm = TRUE))
+  }
+}
+
+
+president_summary <- tenure_by_regime(tenure_data, "president")
+monarch_summary <- tenure_by_regime(tenure_data, "monarch")
+
+president_table <- president_summary |>
+  arrange(desc(mean_tenure)) |>
+  gt() |>
+  tab_header(title = "Mean Tenure by Presidential Regimes") |>
+  cols_label(regime_category = "Regime Category",
+             mean_tenure = "Mean Tenure (years)") |>
+  fmt_number(columns = c(mean_tenure),
+             decimals = 1) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels(columns = everything())) |>
+  tab_caption("Presidential regimes sorted in descending order by mean tenure length.") |>
+  data_color(
+    columns = mean_tenure,
+    colors = scales::col_numeric(c("#deebf7", "#08519c"), domain = NULL)
+  )
+  
+
+president_table
+```
+
+
+### Comparison of Tenure by Presidencies and Monarchies
+
+```{r}
+get_tenure <- function(x) {
+  tenure_by_regime(tenure_data, x) |>
+    mutate(leader_type = x)
+}
+
+combined_wide <- map_dfr(c("president", "monarch"), get_tenure)|>
+  mutate(leader_type = recode(leader_type,
+                              president = "President",
+                              monarch = "Monarch")) |>
+  pivot_wider(names_from = leader_type,
+              values_from = mean_tenure) |>
+   drop_na(President, Monarch)
+
+
+comparison_table <- combined_wide |>
+  arrange(desc(President)) |>
+  gt() |>
+  tab_header(title = "Comparison of Mean Leader Tenure Across Regimes") |>
+  cols_label(regime_category = "Regime Category",
+             President = "President",
+             Monarch = "Monarch") |>
+  tab_spanner(label = "Mean Tenure (years)",
+              columns = c(President, Monarch)) |>
+  fmt_number(columns = c(President, Monarch),
+             decimals = 1) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels(columns = everything())) |>
+  tab_caption("Comparison of mean presidential and monarchical tenure across regime categories.") |>
+  data_color(columns = c(President, Monarch),
+  colors = scales::col_numeric(c("#deebf7", "#08519c"), domain = NULL))
+
+comparison_table
+```
+
+
+:::
+
+
+# Research Question #2
+
+```{r}
+#| message: false
+#| warning: false
+
+combined <- meta_data |>
+  filter(!is.na(gdp_per_capita_nominal), regime_category != "NA") |>
+  group_by(regime_category) |>
+  mutate(regime_group = if_else(n() < 100, "Territories & Colonies",
+                                 first(regime_category))) |>
+  ungroup()
+```
+
+## Plots
+
+### GDP per Capita by Regime Type
+::: {.card title = "GDP per Capita by Regime Type"}
+
+```{r}
+#| label: fig-gdp-area
+#| fig-alt: "Stacked area plot showing mean GDP per capita from 2000 to 2020 for seven regime types including democracies, dictatorships, and territories."
+
+mean_gdp <- combined |>
+  group_by(year, regime_group) |>
+  summarize(mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+            .groups = "drop")
+
+ggplot(data = mean_gdp,
+       mapping = aes(x = year,
+                     y = mean_gdp)) +
+  geom_area(mapping = aes(fill = regime_group),
+            alpha = 0.7) +
+  facet_wrap(~regime_group) +
+  scale_y_continuous(labels = comma) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x = "", y = "Mean GDP per Capita (USD)",
+       subtitle = "Averaged across countries, 2000–2020",
+       fill = "Types of Regime") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+:::
+
+### GDP per Capita: Democracies vs Non-Democracies
+::: {.card title = "Mean GDP per Capita: Democracies vs Non-Democracies"}
+
+```{r}
+#| label: fig-gdp-line
+#| fig-alt: "Line plot comparing mean GDP per capita between democracies and non-democracies from 2000 to 2020."
+
+dem_gdp <- combined |>
+  mutate(democracy = if_else(is_democracy == 1, "Democracy", "Non-Democracy")) |>
+  group_by(year, democracy) |>
+  summarize(mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+            .groups = "drop")
+
+
+ggplot(dem_gdp, aes(x = year, y = mean_gdp, color = democracy)) +
+  geom_line(linewidth = 1.2) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(labels = comma) +
+  labs(x = "", y = "Mean GDP per Capita (USD)",
+       subtitle = "2000–2020",
+       color = "") +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank())
+```
+:::
+
+
+## Tables 
+::: panel-tabset
+
+### GDP per Capita by Regime Type
+
+```{r}
+#| label: tbl-gdp-regime
+combined |>
+  group_by(regime_group) |>
+  summarize(
+    mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+    median_gdp = median(gdp_per_capita_nominal, na.rm = TRUE),
+    n = n()
+  ) |>
+  arrange(desc(mean_gdp)) |>
+  gt() |>
+  tab_header(title = "GDP per Capita by Regime Type") |>
+  cols_label(regime_group = "Regime Type",
+             mean_gdp = "Mean",
+             median_gdp = "Median",
+             n = "Observations") |>
+  tab_spanner(label = "GDP per Capita (USD)",
+              columns = c(mean_gdp, median_gdp)) |>
+  fmt_currency(columns = c(mean_gdp, median_gdp),
+               currency = "USD", decimals = 2) |>
+  fmt_number(columns = n, decimals = 0) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  data_color(columns = c(mean_gdp, median_gdp),
+             palette = c("#deebf7", "#08519c")) |>
+  tab_caption("GDP per capita sorted in descending mean GDP by regime type")
+```
+
+
+### Mean GDP per Capita: Democracies vs Non-Democracies
+
+```{r}
+#| label: tbl-gdp-democracy
+dem_gdp |>
+  pivot_wider(names_from = democracy, values_from = mean_gdp) |>
+  gt() |>
+  tab_header(title = "Mean GDP per Capita: Democracies vs Non-Democracies") |>
+  fmt_currency(columns = c(Democracy, `Non-Democracy`), decimals = 0) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  tab_caption("Mean GDP per capita compared by democracy status, 2000–2020.")
+```
+
+
+:::
+
+
+
+
