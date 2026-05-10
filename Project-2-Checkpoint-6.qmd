@@ -264,6 +264,3 @@ leaflet(map_data, height = 500) |>
             opacity = 1) |>
    setView(-96, 42, 4) 
 ```
-
-
-
