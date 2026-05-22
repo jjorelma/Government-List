@@ -1,0 +1,432 @@
+---
+title: "Geopolitical Dashboard"
+format: 
+  dashboard: 
+    theme: flatly
+    highlight-style: github
+    mainfont: "Inter"
+    orientation: columns
+embed-resources: true
+server: shiny
+nav-buttons: [github]
+github: https://github.com/duck217/project-1
+logo: globe-1.png
+logo-alt: "Blue globe logo"
+---
+
+```{r}
+#| context: setup 
+#| message: false
+#| warning: false
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(countrycode)
+  library(glue)
+  library(shiny)
+  library(jsonlite)
+  library(palmerpenguins)
+  library(gt)
+  library(tidyr)
+  library(purrr)
+  library(ggridges)
+  library(stringr)
+  library(dplyr)
+  library(ggplot2)
+  library(scales)
+  library(gganimate)
+  library(plotly)
+  library(tigris)
+  library(leaflet)
+})
+
+meta_data <- suppressMessages(read_csv("meta_data.csv", show_col_types = FALSE))
+```
+
+
+# Home
+
+## Row {height="25%"}
+
+### 
+
+```{r}
+#| content: valuebox
+#| title: "Global Avg GDP per Capita"
+#| icon: globe
+#| color: primary
+"$18.2K"
+```
+
+```{r}
+#| content: valuebox
+#| title: "Countries Analyzed"
+#| icon: flag
+#| color: success
+142
+```
+
+```{r}
+#| content: valuebox
+#| title: "Regime Types"
+#| icon: bar-chart
+#| color: warning
+7
+```
+
+```{r}
+#| content: valuebox
+#| title: "Years Covered"
+#| icon: calendar
+#| color: danger
+"2000–2020"
+```
+
+### Row {height="75%"}
+
+#### Column
+
+::: {.card}
+##### Welcome to the Geopolitical Dashboard
+This dashboard investigates the relationship between political regime type and 
+economic prosperity across 142 countries from 2000 to 2020.
+
+---
+
+##### What You'll Find
+- **GDP Data Across Regimes** — Explore how mean GDP per capita varies across 7 regime 
+  types including parliamentary democracies, military dictatorships, and royal regimes. 
+  Filter by regime type and compare democracies vs. non-democracies over time.
+- **Diving into USA** — Zoom into the United States as a case study in presidential 
+  democracy. See how personal income per capita is distributed across all 50 states 
+  and filter by U.S. census region.
+
+---
+
+##### Data Sources
+- **V-Dem / Polity** - regime classification data
+- **World Bank** - GDP per capita (nominal USD)
+- **U.S. Bureau of Economic Analysis** - SAINC1 Personal Income by State, 2025
+:::
+
+#### Column
+
+::: {.card}
+##### Key Findings
+
+**GDP & Regime Type**
+
+Parliamentary democracies consistently show the highest mean GDP per capita, 
+while military dictatorships rank lowest across the 2000–2020 period.
+
+---
+
+**U.S. Income Distribution**
+
+Within the U.S., Northeastern and Coastal states lead in per capita income, 
+with the Southeast and Plains regions trailing behind.
+
+---
+
+**Democracy vs. Non-Democracy**
+
+On average, democracies outperform non-democracies in GDP per capita, though 
+the gap has narrowed slightly over the 20-year period.
+:::
+
+# GDP Data Across Regimes
+
+```{r}
+#| context: setup
+#| message: false
+#| warning: false
+
+combined <- meta_data |>
+  filter(!is.na(gdp_per_capita_nominal), regime_category != "NA") |>
+  group_by(regime_category) |>
+  mutate(regime_group = if_else(n() < 100, "Territories & Colonies",
+                                 first(regime_category))) |>
+  ungroup()
+
+mean_gdp <- combined |>
+  group_by(year, regime_group) |>
+  summarize(mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+            .groups = "drop")
+
+dem_gdp <- combined |>
+  mutate(democracy = if_else(is_democracy == 1, "Democracy", "Non-Democracy")) |>
+  group_by(year, democracy) |>
+  summarize(mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+            .groups = "drop")
+
+```
+## {.sidebar}
+
+```{r}
+selectInput(
+  inputId  = "regime_select",
+  label    = "Select Regime Type:",
+  choices  = c("All", sort(unique(mean_gdp$regime_group))),
+  selected = "All"
+)
+```
+
+## Plots 
+
+### Mean GDP per Capita by Regime Type
+::: {.card title = "Mean GDP per Capita by Regime Type"}
+
+```{r}
+plotOutput('gdp_plot')
+```
+
+
+```{r}
+#| context: server
+
+output$gdp_plot <- renderPlot({
+
+  plot_data <- if (input$regime_select == "All") {
+    mean_gdp
+  } else {
+    mean_gdp |> filter(regime_group == input$regime_select)
+  }
+  
+  p <- ggplot(data = plot_data,
+         mapping = aes(x = year, y = mean_gdp)) +
+    geom_area(
+      mapping = aes(fill = regime_group),
+      alpha = 0.7) +
+    scale_y_continuous(labels = comma,
+                       limits = c(0, max(mean_gdp$mean_gdp, na.rm = TRUE))) +
+    scale_fill_manual(values = c(
+      "Civilian dictatorship" = "#2166ac",
+      "Military dictatorship" = "#d6604d",
+      "Mixed democratic"    = "#4d4d4d",
+      "Parliamentary democracy" = "#74add1",
+      "Presidential democracy"  = "#1a9850",
+      "Territories & Colonies" = "#f4a582",
+      "Royal dictatorship"  = "#9970ab")
+    ) +
+    labs(x = "", y = "Mean GDP per Capita (USD)",
+         title = "Mean GDP per Capita by Regime Type",
+         subtitle = "Averaged across countries, 2000–2020",
+         fill = "Regime Type") +
+    theme_minimal() +
+    theme(legend.position = "none",
+          panel.grid.minor = element_blank())
+  
+  if (input$regime_select == "All") {
+    p <- p + facet_wrap(~regime_group, scales = "fixed")
+  }
+  p
+})
+  
+```
+:::
+
+### GDP per Capita: Democracies vs Non-Democracies 
+::: {.card title = "Mean GDP per Capita: Democracies vs Non-Democracies"}
+
+```{r}
+#| label: fig-gdp-demo-animated
+#| fig-alt: "Animated line plot comparing mean GDP per capita between democracies and non-democracies from 2000 to 2020."
+
+p <- ggplot(dem_gdp,
+            aes(x = year, y = mean_gdp,
+                color = democracy,
+                group = democracy)) +
+  geom_line(linewidth = 1.2) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(labels = comma) +
+  labs(x = "",
+       y = "Mean GDP per Capita (USD)",
+       title = "Democracy vs Non-Democracy Countries",
+       color = "") +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank()) +
+  transition_reveal(year)
+
+animate(p)
+```
+:::
+
+
+## Tables 
+::: panel-tabset
+
+### GDP per Capita by Regime Type
+
+```{r}
+#| label: tbl-gdp-regime
+combined |>
+  group_by(regime_group) |>
+  summarize(
+    mean_gdp = mean(gdp_per_capita_nominal, na.rm = TRUE),
+    median_gdp = median(gdp_per_capita_nominal, na.rm = TRUE),
+    n = n()
+  ) |>
+  arrange(desc(mean_gdp)) |>
+  gt() |>
+  tab_header(title = "GDP per Capita by Regime Type") |>
+  cols_label(regime_group = "Regime Type",
+             mean_gdp = "Mean",
+             median_gdp = "Median",
+             n = "Observations") |>
+  tab_spanner(label = "GDP per Capita (USD)",
+              columns = c(mean_gdp, median_gdp)) |>
+  fmt_currency(columns = c(mean_gdp, median_gdp),
+               currency = "USD", decimals = 2) |>
+  fmt_number(columns = n, decimals = 0) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  data_color(columns = c(mean_gdp, median_gdp),
+             palette = c("#deebf7", "#08519c")) |>
+  tab_caption("GDP per capita sorted in descending mean GDP by regime type")
+```
+
+
+### Mean GDP per Capita: Democracies vs Non-Democracies
+
+```{r}
+#| label: tbl-gdp-democracy
+dem_gdp |>
+  pivot_wider(names_from = democracy, values_from = mean_gdp) |>
+  gt() |>
+  tab_header(title = "Mean GDP per Capita: Democracies vs Non-Democracies") |>
+  fmt_currency(columns = c(Democracy, `Non-Democracy`), decimals = 0) |>
+  tab_style(style = cell_text(weight = "bold"),
+            locations = cells_column_labels()) |>
+  tab_caption("Mean GDP per capita compared by democracy status, 2000–2020.")
+```
+
+
+:::
+
+# Diving into USA 
+
+```{r}
+#| context: setup
+#| message: false
+#| warning: false
+library(readr)
+
+SAINC1_ALL_AREAS_1929_2025 <- read_csv("SAINC1__ALL_AREAS_1929_2025.csv")
+
+us_data <- SAINC1_ALL_AREAS_1929_2025
+
+us_data <- us_data |>
+  filter(Description == "Per capita personal income (dollars) 2/") |>
+  select(GeoFIPS, GeoName, Region, "2025") |>
+  rename(income_2025 = `2025`)
+
+write.csv(us_data, file = "us_data.csv")
+```
+
+## Tables
+
+### Why the United States?
+
+As a **presidential democracy** country, the United States consistently ranks among the highest GDP per capita countries in our dataset, serving as an outlier. So, by examining how annual income is distributed across states reveals whether this economic output is **evenly spread** or **concentrated** in specific regions.
+
+### Summary Table
+
+```{r}
+#| label: tbl-income-state
+
+gt_output("income_table")
+```
+
+```{r}
+#| context: server
+
+output$income_table <- render_gt({
+  filtered <- us_data |>
+    mutate(
+      GeoName = str_remove(GeoName, " \\*$"),
+      income_2025 = as.numeric(income_2025)
+    ) |>
+    filter(
+      GeoName != "United States",
+      !GeoName %in% c("New England", "Mideast", "Great Lakes", "Plains",
+                       "Southeast", "Southwest", "Rocky Mountain", "Far West")
+    )
+
+  if (input$region_select != "All") {
+    filtered <- filtered |>
+      filter(Region == as.numeric(input$region_select))
+  }
+
+  filtered |>
+    select(GeoName, income_2025) |>
+    arrange(desc(income_2025)) |>
+    gt() |>
+    tab_header(title = "Income per Capita by State") |>
+    cols_label(GeoName = "State", income_2025 = "Income per Capita") |>
+    fmt_currency(columns = income_2025, currency = "USD", decimals = 0) |>
+    data_color(columns = income_2025,
+               palette = c("#f7fbff", "#6baed6", "#08306b")) |>
+    tab_style(style = cell_text(weight = "bold"),
+              locations = cells_column_labels()) |>
+    tab_caption("Per capita personal income by U.S. state, sorted from highest to lowest.")
+})
+```
+
+## Income per Capita by State
+
+::: {.card}
+```{r}
+#| label: fig-income-state
+#| output: asis
+#| fig-alt: "Map of the lower 48 U.S. states displaying income per capita by state using a color scale"
+
+states_sf <- states(cb = TRUE, class = "sf",
+                    progress_bar = FALSE)
+
+map_data <- states_sf |>
+  left_join(us_data, by = c("NAME" = "GeoName"))
+
+colors <- scales::col_numeric(
+  palette = c("#f7fbff", "#6baed6", "#08306b"),
+  domain = map_data$income_2025)
+
+leaflet(map_data, height = 500) |>
+  addTiles(providers$CartoDB.PositronNoLabels) |>
+  addPolygons(fillColor = ~colors(income_2025),
+              fillOpacity = 1,
+              color = "white",
+              weight = 1,
+              label = ~paste0(NAME, ": $", scales::comma(income_2025)),
+    highlightOptions = highlightOptions(weight = 2,
+      color = "black",
+      bringToFront = TRUE)) |>
+  addLegend(position = "bottomright",
+            pal = colors,
+            values = ~na.omit(income_2025),
+            title = "Income per capita",
+            labFormat = labelFormat(prefix = "$",
+                                    big.mark = ","),
+            opacity = 1) |>
+   setView(-96, 42, 4) 
+```
+
+
+
+```{r}
+selectInput(
+  inputId  = "region_select",
+  label    = "Filter by Region:",
+  choices  = c("All" = "All",
+               "New England"    = "1",
+               "Mideast"        = "2",
+               "Great Lakes"    = "3",
+               "Plains"         = "4",
+               "Southeast"      = "5",
+               "Southwest"      = "6",
+               "Rocky Mountain" = "7",
+               "Far West"       = "8"),
+  selected = "All"
+)
+```
+
+:::

@@ -34,6 +34,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(ggplot2)
   library(scales)
+  library(gganimate)
   library(plotly)
   library(tigris)
   library(leaflet)
@@ -66,10 +67,11 @@ dem_gdp <- combined |>
 
 ```
 
-## Plots 
+## Plots
 
 ### Mean GDP per Capita by Regime Type
-::: {.card title = "Mean GDP per Capita by Regime Type"}
+
+::: {.card title = "Mean GDP per Capita by Regime Type" .bg-success}
 
 ```{r}
 #| label: fig-gdp-area
@@ -79,8 +81,8 @@ ggplot(data = mean_gdp,
        mapping = aes(x = year,
                      y = mean_gdp)) +
   geom_area(mapping = aes(fill = regime_group),
-            alpha = 0.7) +
-  facet_wrap(~regime_group) +
+            alpha = 0.7,
+            identity = "stack") +
   scale_y_continuous(labels = comma) +
   scale_fill_brewer(palette = "Set1") +
   labs(x = "", y = "Mean GDP per Capita (USD)",
@@ -91,35 +93,40 @@ ggplot(data = mean_gdp,
   theme(legend.position = "none",
         panel.grid.minor = element_blank())
 ```
+
 :::
 
-### GDP per Capita: Democracies vs Non-Democracies 
+### GDP per Capita: Democracies vs Non-Democracies
+
 ::: {.card title = "Mean GDP per Capita: Democracies vs Non-Democracies"}
 
 ```{r}
-#| label: fig-gdp-demo-interactive
-#| fig-alt: "Interactive line plot comparing mean GDP per capita between democracies and non-democracies from 2000 to 2020."
+#| label: fig-gdp-demo-animated
+#| fig-alt: "Animated line plot comparing mean GDP per capita between democracies and non-democracies from 2000 to 2020."
 
-library(plotly)
-
-p <- ggplot(dem_gdp, aes(x = year, y = mean_gdp, color = democracy)) +
+p <- ggplot(dem_gdp,
+            aes(x = year, y = mean_gdp,
+                color = democracy,
+                group = democracy)) +
   geom_line(linewidth = 1.2) +
   scale_color_brewer(palette = "Set1") +
   scale_y_continuous(labels = comma) +
-  labs(x = "", y = "Mean GDP per Capita (USD)",
+  labs(x = "",
+       y = "Mean GDP per Capita (USD)",
        title = "Democracy vs Non-Democracy Countries",
        color = "") +
   theme_minimal() +
-  theme(panel.grid.minor = element_blank())
+  theme(panel.grid.minor = element_blank()) +
+  transition_reveal(year)
 
-ggplotly(p)
+animate(p)
 ```
+
 :::
 
+## Tables
 
-## Tables 
 ::: panel-tabset
-
 ### GDP per Capita by Regime Type
 
 ```{r}
@@ -150,7 +157,6 @@ combined |>
   tab_caption("GDP per capita sorted in descending mean GDP by regime type")
 ```
 
-
 ### Mean GDP per Capita: Democracies vs Non-Democracies
 
 ```{r}
@@ -164,11 +170,9 @@ dem_gdp |>
             locations = cells_column_labels()) |>
   tab_caption("Mean GDP per capita compared by democracy status, 2000–2020.")
 ```
-
-
 :::
 
-# Diving into USA 
+# Diving into USA
 
 ```{r}
 #| message: false
